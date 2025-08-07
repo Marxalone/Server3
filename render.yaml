@@ -1,9 +1,12 @@
 services:
   - type: web
-    name: marx-bot-analytics
+    name: whatsapp-analytics
     env: node
-    buildCommand: npm install
-    startCommand: node analytics-server.js
+    build:
+      node:
+        version: ">=20.0.0"
     envVars:
       - key: PORT
-        value: 3001
+        value: "10000"
+      - key: NODE_ENV
+        value: "production"

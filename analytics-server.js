@@ -1,93 +1,80 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const fs = require('fs');
+const path = require('path');
 const app = express();
-const PORT = process.env.PORT || 3001;
-
-// In-memory storage (for production consider using a database)
-const analyticsData = {
-    totalConnections: 0,
-    activeConnections: 0,
-    connectionsToday: 0,
-    hourlyConnections: Array(24).fill(0),
-    dailyConnections: {},
-    botVersions: {},
-    disconnectReasons: {}
-};
+const PORT = process.env.PORT || 3000;
 
 // Middleware
 app.use(cors());
 app.use(express.json());
+app.use(express.static('public'));
 
-// Reset daily counter at midnight
-function resetDailyCounter() {
-    const now = new Date();
-    const midnight = new Date(now);
-    midnight.setHours(24, 0, 0, 0);
-    const timeUntilMidnight = midnight - now;
-    
-    setTimeout(() => {
-        analyticsData.connectionsToday = 0;
-        resetDailyCounter();
-    }, timeUntilMidnight);
+// Data storage
+const dataPath = path.join(__dirname, 'data', 'analytics.json');
+
+// Ensure data directory exists
+if (!fs.existsSync(path.dirname(dataPath))) {
+  fs.mkdirSync(path.dirname(dataPath), { recursive: true });
 }
-resetDailyCounter();
 
-// API endpoint to receive analytics
+// Initialize data file if it doesn't exist
+if (!fs.existsSync(dataPath)) {
+  fs.writeFileSync(dataPath, JSON.stringify({ bots: [], stats: {} }, null, 2));
+}
+
+// API endpoint to receive analytics data
 app.post('/api/analytics', (req, res) => {
-    const { event, botId } = req.body;
-    const now = new Date();
-    const hour = now.getHours();
-    const dateKey = now.toISOString().split('T')[0];
+  try {
+    const data = JSON.parse(fs.readFileSync(dataPath));
+    const botData = req.body;
     
-    switch(event) {
-        case 'connection':
-            analyticsData.totalConnections++;
-            analyticsData.activeConnections++;
-            analyticsData.connectionsToday++;
-            analyticsData.hourlyConnections[hour]++;
-            
-            // Track by date
-            if (!analyticsData.dailyConnections[dateKey]) {
-                analyticsData.dailyConnections[dateKey] = 0;
-            }
-            analyticsData.dailyConnections[dateKey]++;
-            
-            // Track bot versions
-            const version = req.body.version || 'unknown';
-            if (!analyticsData.botVersions[version]) {
-                analyticsData.botVersions[version] = 0;
-            }
-            analyticsData.botVersions[version]++;
-            break;
-            
-        case 'disconnection':
-            analyticsData.activeConnections = Math.max(0, analyticsData.activeConnections - 1);
-            const reason = req.body.reason || 'unknown';
-            if (!analyticsData.disconnectReasons[reason]) {
-                analyticsData.disconnectReasons[reason] = 0;
-            }
-            analyticsData.disconnectReasons[reason]++;
-            break;
-            
-        case 'message_received':
-            // You can track message metrics here if needed
-            break;
+    // Update or add bot data
+    const existingIndex = data.bots.findIndex(b => b.botId === botData.botId);
+    if (existingIndex >= 0) {
+      data.bots[existingIndex] = botData;
+    } else {
+      data.bots.push(botData);
     }
     
-    res.status(200).send('OK');
+    // Update global stats
+    data.stats = {
+      totalBots: data.bots.length,
+      totalUsers: data.bots.reduce((sum, bot) => sum + bot.stats.totalUsers, 0),
+      activeUsers: data.bots.reduce((sum, bot) => sum + bot.stats.activeUsers, 0),
+      messagesProcessed: data.bots.reduce((sum, bot) => sum + bot.stats.messagesProcessed, 0),
+      commandsProcessed: data.bots.reduce((sum, bot) => sum + bot.stats.commandsProcessed, 0),
+      groups: data.bots.reduce((sum, bot) => sum + bot.stats.groups, 0),
+      errors: data.bots.reduce((sum, bot) => sum + bot.stats.errors, 0),
+      lastUpdated: new Date().toISOString()
+    };
+    
+    // Save to file
+    fs.writeFileSync(dataPath, JSON.stringify(data, null, 2));
+    res.status(200).send('Data received');
+  } catch (error) {
+    console.error('Error processing analytics:', error);
+    res.status(500).send('Internal Server Error');
+  }
 });
 
 // API endpoint to get analytics data
 app.get('/api/analytics', (req, res) => {
-    res.json({
-        ...analyticsData,
-        currentTime: new Date().toISOString()
-    });
+  try {
+    const data = JSON.parse(fs.readFileSync(dataPath));
+    res.json(data);
+  } catch (error) {
+    console.error('Error reading analytics:', error);
+    res.status(500).send('Internal Server Error');
+  }
 });
 
-// Serve static files (for dashboard)
-app.use(express.static('public'));
+// Serve dashboard
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
 
 app.listen(PORT, () => {
-    console.log(`Analytics server running on port ${PORT}`);
+  console.log(`Analytics server running on http://localhost:${PORT}`);
 });
