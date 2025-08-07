@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MARX BOT Analytics Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .gradient-bg {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+        }
+        .card-hover {
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        .card-hover:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+        }
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+    </style>
+</head>
+<body class="gradient-bg text-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <header class="flex justify-between items-center mb-8">
+            <div>
+                <h1 class="text-3xl font-bold text-cyan-400">MARX BOT ANALYTICS</h1>
+                <p class="text-gray-400">Real-time usage statistics</p>
+            </div>
+            <div id="lastUpdated" class="text-gray-400 text-sm"></div>
+        </header>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <!-- Total Connections Card -->
+            <div class="bg-slate-800 rounded-xl p-6 shadow-lg card-hover">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <p class="text-gray-400">Total Connections</p>
+                        <h2 id="totalConnections" class="text-3xl font-bold mt-2">0</h2>
+                    </div>
+                    <div class="bg-cyan-600 rounded-full p-3">
+                        <i class="fas fa-link text-white text-xl"></i>
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <p class="text-gray-400 text-sm">Today: <span id="todayConnections" class="text-cyan-400">0</span></p>
+                </div>
+            </div>
+
+            <!-- Active Connections Card -->
+            <div class="bg-slate-800 rounded-xl p-6 shadow-lg card-hover">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <p class="text-gray-400">Active Now</p>
+                        <h2 id="activeConnections" class="text-3xl font-bold mt-2">0</h2>
+                    </div>
+                    <div class="bg-green-600 rounded-full p-3">
+                        <i class="fas fa-users text-white text-xl"></i>
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <div class="flex items-center">
+                        <span class="h-2 w-2 rounded-full bg-green-500 mr-2 pulse"></span>
+                        <span class="text-green-400 text-sm">Live</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Hourly Activity Card -->
+            <div class="bg-slate-800 rounded-xl p-6 shadow-lg card-hover">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <p class="text-gray-400">Hourly Activity</p>
+                        <h2 id="currentHourConnections" class="text-3xl font-bold mt-2">0</h2>
+                    </div>
+                    <div class="bg-purple-600 rounded-full p-3">
+                        <i class="fas fa-clock text-white text-xl"></i>
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <p class="text-gray-400 text-sm">Peak: <span id="peakHour" class="text-purple-400">-</span></p>
+                </div>
+            </div>
+
+            <!-- Disconnections Card -->
+            <div class="bg-slate-800 rounded-xl p-6 shadow-lg card-hover">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <p class="text-gray-400">Disconnections</p>
+                        <h2 id="totalDisconnections" class="text-3xl font-bold mt-2">0</h2>
+                    </div>
+                    <div class="bg-red-600 rounded-full p-3">
+                        <i class="fas fa-plug text-white text-xl"></i>
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <p class="text-gray-400 text-sm">Common: <span id="commonReason" class="text-red-400">-</span></p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Section -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <div class="bg-slate-800 rounded-xl p-6 shadow-lg card-hover">
+                <h3 class="text-xl font-semibold mb-4">Connections by Hour</h3>
+                <canvas id="hourlyChart" height="250"></canvas>
+            </div>
+            <div class="bg-slate-800 rounded-xl p-6 shadow-lg card-hover">
+                <h3 class="text-xl font-semibold mb-4">Daily Connections</h3>
+                <canvas id="dailyChart" height="250"></canvas>
+            </div>
+        </div>
+
+        <!-- Bottom Section -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div class="bg-slate-800 rounded-xl p-6 shadow-lg card-hover">
+                <h3 class="text-xl font-semibold mb-4">Disconnection Reasons</h3>
+                <div id="disconnectReasons" class="space-y-2"></div>
+            </div>
+            <div class="bg-slate-800 rounded-xl p-6 shadow-lg card-hover">
+                <h3 class="text-xl font-semibold mb-4">Bot Versions</h3>
+                <div id="botVersions" class="space-y-2"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Charts
+        let hourlyChart, dailyChart;
+        let lastData = null;
+        
+        // Initialize charts
+        function initCharts() {
+            const hourlyCtx = document.getElementById('hourlyChart').getContext('2d');
+            hourlyChart = new Chart(hourlyCtx, {
+                type: 'bar',
+                data: {
+                    labels: Array.from({length: 24}, (_, i) => `${i}:00`),
+                    datasets: [{
+                        label: 'Connections',
+                        data: Array(24).fill(0),
+                        backgroundColor: 'rgba(34, 211, 238, 0.7)',
+                        borderColor: 'rgba(34, 211, 238, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: {
+                                color: 'rgba(100, 116, 139, 0.2)'
+                            },
+                            ticks: {
+                                color: 'rgba(148, 163, 184, 1)'
+                            }
+                        },
+                        x: {
+                            grid: {
+                                color: 'rgba(100, 116, 139, 0.2)'
+                            },
+                            ticks: {
+                                color: 'rgba(148, 163, 184, 1)'
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: 'rgba(148, 163, 184, 1)'
+                            }
+                        }
+                    }
+                }
+            });
+
+            const dailyCtx = document.getElementById('dailyChart').getContext('2d');
+            dailyChart = new Chart(dailyCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Daily Connections',
+                        data: [],
+                        fill: true,
+                        backgroundColor: 'rgba(124, 58, 237, 0.2)',
+                        borderColor: 'rgba(124, 58, 237, 1)',
+                        tension: 0.4,
+                        pointBackgroundColor: 'rgba(124, 58, 237, 1)'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: {
+                                color: 'rgba(100, 116, 139, 0.2)'
+                            },
+                            ticks: {
+                                color: 'rgba(148, 163, 184, 1)'
+                            }
+                        },
+                        x: {
+                            grid: {
+                                color: 'rgba(100, 116, 139, 0.2)'
+                            },
+                            ticks: {
+                                color: 'rgba(148, 163, 184, 1)'
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: 'rgba(148, 163, 184, 1)'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Update UI with data
+        function updateUI(data) {
+            // Update cards
+            document.getElementById('totalConnections').textContent = data.totalConnections.toLocaleString();
+            document.getElementById('activeConnections').textContent = data.activeConnections.toLocaleString();
+            document.getElementById('todayConnections').textContent = data.connectionsToday.toLocaleString();
+            
+            // Hourly stats
+            const currentHour = new Date().getHours();
+            document.getElementById('currentHourConnections').textContent = data.hourlyConnections[currentHour] || 0;
+            
+            const maxHour = data.hourlyConnections.indexOf(Math.max(...data.hourlyConnections));
+            document.getElementById('peakHour').textContent = `${maxHour}:00 (${data.hourlyConnections[maxHour]})`;
+            
+            // Disconnections
+            const totalDisconnections = Object.values(data.disconnectReasons).reduce((a, b) => a + b, 0);
+            document.getElementById('totalDisconnections').textContent = totalDisconnections.toLocaleString();
+            
+            const commonReason = Object.entries(data.disconnectReasons).sort((a, b) => b[1] - a[1])[0];
+            document.getElementById('commonReason').textContent = commonReason ? `${commonReason[0]} (${commonReason[1]})` : '-';
+            
+            // Update charts
+            hourlyChart.data.datasets[0].data = data.hourlyConnections;
+            hourlyChart.update();
+            
+            const dailyLabels = Object.keys(data.dailyConnections).sort();
+            const dailyData = dailyLabels.map(date => data.dailyConnections[date]);
+            
+            dailyChart.data.labels = dailyLabels;
+            dailyChart.data.datasets[0].data = dailyData;
+            dailyChart.update();
+            
+            // Update disconnect reasons list
+            const reasonsContainer = document.getElementById('disconnectReasons');
+            reasonsContainer.innerHTML = '';
+            
+            Object.entries(data.disconnectReasons)
+                .sort((a, b) => b[1] - a[1])
+                .forEach(([reason, count]) => {
+                    const reasonElement = document.createElement('div');
+                    reasonElement.className = 'flex justify-between items-center';
+                    
+                    const reasonText = document.createElement('span');
+                    reasonText.className = 'text-gray-300 truncate';
+                    reasonText.textContent = reason || 'Unknown';
+                    
+                    const reasonCount = document.createElement('span');
+                    reasonCount.className = 'bg-slate-700 px-2 py-1 rounded text-sm';
+                    reasonCount.textContent = count;
+                    
+                    reasonElement.appendChild(reasonText);
+                    reasonElement.appendChild(reasonCount);
+                    reasonsContainer.appendChild(reasonElement);
+                });
+            
+            // Update bot versions list
+            const versionsContainer = document.getElementById('botVersions');
+            versionsContainer.innerHTML = '';
+            
+            Object.entries(data.botVersions)
+                .sort((a, b) => b[1] - a[1])
+                .forEach(([version, count]) => {
+                    const versionElement = document.createElement('div');
+                    versionElement.className = 'flex justify-between items-center';
+                    
+                    const versionText = document.createElement('span');
+                    versionText.className = 'text-gray-300 truncate';
+                    versionText.textContent = version || 'Unknown';
+                    
+                    const versionCount = document.createElement('span');
+                    versionCount.className = 'bg-slate-700 px-2 py-1 rounded text-sm';
+                    versionCount.textContent = count;
+                    
+                    versionElement.appendChild(versionText);
+                    versionElement.appendChild(versionCount);
+                    versionsContainer.appendChild(versionElement);
+                });
+            
+            // Update last updated time
+            document.getElementById('lastUpdated').textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
+        }
+
+        // Fetch data from server
+        async function fetchData() {
+            try {
+                const response = await fetch('/api/analytics');
+                const data = await response.json();
+                
+                if (JSON.stringify(data) !== JSON.stringify(lastData)) {
+                    updateUI(data);
+                    lastData = data;
+                }
+            } catch (error) {
+                console.error('Error fetching data:', error);
+            }
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            initCharts();
+            fetchData();
+            
+            // Refresh data every 5 seconds
+            setInterval(fetchData, 5000);
+        });
+    </script>
+</body>
+</html>
